@@ -3,7 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChatModule } from './chat/chat.module';
 import { RedisModule } from './redis/redis.module';
-import { Message } from './chat/message.entity';
+import { ChatEntity } from './chat/chat.entity';
 
 @Module({
   imports: [
@@ -19,7 +19,7 @@ import { Message } from './chat/message.entity';
         username: configService.get<string>('DATABASE_USER'),
         password: configService.get<string>('DATABASE_PASSWORD'),
         database: configService.get<string>('DATABASE_NAME'),
-        entities: [Message],
+        entities: [ChatEntity],
         synchronize: true,
       }),
       inject: [ConfigService],

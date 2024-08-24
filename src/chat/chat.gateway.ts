@@ -7,7 +7,7 @@ import {
   SubscribeMessage,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { ConfigService } from '@nestjs/config';
+// import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../redis/redis.service';
 import { ChatService } from './chat.service';
 
@@ -20,7 +20,7 @@ export class ChatGateway
   constructor(
     private readonly redisService: RedisService,
     private readonly chatService: ChatService,
-    private readonly configService: ConfigService,
+    // private readonly configService: ConfigService,
   ) {}
 
   afterInit(server: Server) {
@@ -38,23 +38,35 @@ export class ChatGateway
   @SubscribeMessage('message')
   async handleMessage(
     client: Socket,
-    payload: { sender: string; message: string; group: string },
+    payload: { sender: string; content: string; group: string },
   ) {
     const message = {
       sender: payload.sender,
-      message: payload.message,
+      content: payload.content,
       group: payload.group,
     };
     await this.chatService.saveMessage(
       payload.sender,
-      payload.message,
+      payload.content,
       payload.group,
     );
     await this.redisService.publish(
       `chat:${payload.group}`,
-      JSON.stringify(message),
-    );
+    JSON.stringify(message),
+  );
   }
+
+  @SubscribeMessage('file')
+  async handleImage(client: Socket, payload: { sender: string; group: string; content: string }) {
+    const filePayload = { sender: payload.sender, content: payload.content, group: payload.group };
+
+    // Save file data to the database
+    await this.chatService.saveFile(payload.sender, payload.content, payload.group);
+
+    // Broadcast file to all clients in the group
+    this.server.to(payload.group).emit('file', filePayload);
+  }
+
 
   @SubscribeMessage('joinGroup')
   async handleJoinGroup(client: Socket, payload: { group: string }) {
@@ -64,6 +76,18 @@ export class ChatGateway
     // Send chat history to the client
     const messages = await this.chatService.getMessagesByGroup(payload.group);
     client.emit('chatHistory', messages);
+  }
+
+  @SubscribeMessage('typing')
+  handleTyping(client: Socket, payload: { sender: string; group: string }) {
+    // Broadcast to all clients in the group except the sender
+    client.broadcast.to(payload.group).emit('typing', payload);
+  }
+
+  @SubscribeMessage('stopTyping')
+  handleStopTyping(client: Socket, payload: { sender: string; group: string }) {
+    // Broadcast to all clients in the group except the sender
+    client.broadcast.to(payload.group).emit('stopTyping', payload);
   }
 
   async onModuleInit() {

@@ -3,45 +3,6 @@
 <head>
   <title>Chat Application</title>
   <script src="/socket.io/socket.io.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const socket = io();
-
-      socket.on('message', (data) => {
-        const messages = document.getElementById('messages');
-        const messageItem = document.createElement('li');
-        messageItem.textContent = `${data.sender}: ${data.message}`;
-        messages.appendChild(messageItem);
-      });
-
-      socket.on('chatHistory', (messages) => {
-        const messageList = document.getElementById('messages');
-        messageList.innerHTML = '';
-        messages.forEach((msg) => {
-          const messageItem = document.createElement('li');
-          messageItem.textContent = `${msg.sender}: ${msg.message}`;
-          messageList.appendChild(messageItem);
-        });
-      });
-
-      document.getElementById('send').addEventListener('click', () => {
-        const sender = document.getElementById('sender').value;
-        const message = document.getElementById('message').value;
-        const group = document.getElementById('group').value;
-        socket.emit('message', { sender, message, group });
-        document.getElementById('message').value = '';
-      });
-
-      document.getElementById('group').addEventListener('change', () => {
-        const group = document.getElementById('group').value;
-        socket.emit('joinGroup', { group });
-        document.getElementById('messages').innerHTML = ''; // Clear messages on group change
-      });
-
-      // Emit joinGroup event for the default group
-      socket.emit('joinGroup', { group: document.getElementById('group').value });
-    });
-  </script>
 </head>
 <body>
 <h1>Chat Application</h1>
@@ -50,10 +11,143 @@
   <option value="group1">Group 1</option>
   <option value="group2">Group 2</option>
   <option value="group3">Group 3</option>
-  <!-- Add more groups as needed -->
 </select>
 <input id="message" placeholder="Your message">
 <button id="send">Send</button>
+<input type="file" id="fileUpload" accept="*">
+<button id="sendImage">Send Image</button>
 <ul id="messages"></ul>
+<p id="typing"></p>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const socket = io();
+
+    const messageInput = document.getElementById('message');
+    const senderInput = document.getElementById('sender');
+    const groupSelect = document.getElementById('group');
+
+    let typingTimeout;
+
+    messageInput.addEventListener('input', () => {
+      clearTimeout(typingTimeout);
+      socket.emit('typing', { sender: senderInput.value, group: groupSelect.value });
+
+      typingTimeout = setTimeout(() => {
+        socket.emit('stopTyping', { sender: senderInput.value, group: groupSelect.value });
+      }, 500);
+    });
+
+    socket.on('typing', (data) => {
+      const typingElement = document.getElementById('typing');
+      typingElement.textContent = `${data.sender} is typing...`;
+    });
+
+    socket.on('stopTyping', () => {
+      const typingElement = document.getElementById('typing');
+      typingElement.textContent = '';
+    });
+
+    socket.on('message', (data) => {
+      const messages = document.getElementById('messages');
+      const messageItem = document.createElement('li');
+      messageItem.textContent = `${data.sender}: ${data.content}`;
+      messages.appendChild(messageItem);
+    });
+
+    socket.on('file', (data) => {
+      const messages = document.getElementById('messages');
+      const messageItem = document.createElement('li');
+      messageItem.textContent = `${data.sender}: `;
+
+      if (data.content.split(';')[0]?.split(':')[1]?.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.src = data.content;
+        img.alt = `${data.sender} sent an image`;
+        img.style.maxWidth = '300px';
+        messageItem.appendChild(img);
+      } else {
+        const link = document.createElement('a');
+        link.href = data.content;
+        link.download = +new Date();
+        link.textContent = `Download`;
+        messageItem.appendChild(link);
+      }
+
+      messages.appendChild(messageItem);
+    });
+
+    // socket.on('chatHistory', (messages) => {
+    //   const messageList = document.getElementById('messages');
+    //   messageList.innerHTML = '';
+    //   messages.forEach((msg) => {
+    //     const messageItem = document.createElement('li');
+    //     messageItem.textContent = `${msg.sender}: ${msg.content}`;
+    //     messageList.appendChild(messageItem);
+    //   });
+    // });
+
+    socket.on('chatHistory', (messages) => {
+      const messageList = document.getElementById('messages');
+      messageList.innerHTML = '';
+
+      messages.forEach((msg) => {
+        const messageItem = document.createElement('li');
+        messageItem.textContent = `${msg.sender}: `;
+
+        if (msg.content.split(';')[0]?.split(':')[1]) {
+          if (msg.content.split(';')[0]?.split(':')[1]?.startsWith('image/')) {
+            const img = document.createElement('img');
+            img.src = msg.content;
+            img.alt = `${msg.sender} sent an image`;
+            img.style.maxWidth = '300px';
+            messageItem.appendChild(img);
+          } else {
+            const link = document.createElement('a');
+            link.href = msg.content;
+            link.download = +new Date();
+            link.textContent = `Download`;
+            messageItem.appendChild(link);
+          }
+        } else {
+          messageItem.textContent += msg.content;
+        }
+
+        messageList.appendChild(messageItem);
+      });
+    });
+
+
+    document.getElementById('send').addEventListener('click', () => {
+      const sender = document.getElementById('sender').value;
+      const message = document.getElementById('message').value;
+      const group = document.getElementById('group').value;
+      socket.emit('message', { sender, content: message, group });
+      document.getElementById('message').value = '';
+    });
+
+    document.getElementById('sendImage').addEventListener('click', () => {
+      const sender = document.getElementById('sender').value;
+      const group = document.getElementById('group').value;
+      const file = document.getElementById('fileUpload').files[0];
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const fileData = e.target.result;
+          socket.emit('file', { sender, group, content: fileData });
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    document.getElementById('group').addEventListener('change', () => {
+      const group = document.getElementById('group').value;
+      socket.emit('joinGroup', { group });
+      document.getElementById('messages').innerHTML = ''; // Clear messages on group change
+    });
+
+    socket.emit('joinGroup', { group: document.getElementById('group').value });
+  });
+</script>
 </body>
 </html>
